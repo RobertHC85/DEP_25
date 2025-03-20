@@ -1,1 +1,39 @@
+name: Deploy DAG to Airflow
 
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'dags/**'  # Se activa solo si hay cambios en la carpeta `dags/`
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Deploy DAG to Airflow
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.AIRFLOW_HOST }}  # IP del servidor de Airflow
+          username: ${{ secrets.AIRFLOW_USER }}
+          password: ${{ secrets.AIRFLOW_PASS }}
+          source: "dags/my_airflow_dag.py"
+          target: "/opt/airflow/dags/"
+
+      - name: Restart Airflow Webserver
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.AIRFLOW_HOST }}
+          username: ${{ secrets.AIRFLOW_USER }}
+          password: ${{ secrets.AIRFLOW_PASS }}
+          script: |
+            sudo docker restart airflow-airflow-webserver-1
+            sleep 10  # Esperar que se reinicie
+            curl -X POST "http://${{ secrets.AIRFLOW_HOST }}:8080/api/v1/dags/mi_dag_ci_cd/dagRuns" \
+              -H "Content-Type: application/json" \
+              --user "airflow:airflow" \
+              --data '{"conf": {}}'
